@@ -4,7 +4,7 @@ using namespace std;
 
 int N, num;
 string cmd;
-deque<int> dq;
+queue<int> q;
 
 int main() {
     cin.tie(0) -> ios::sync_with_stdio(0);
@@ -15,33 +15,33 @@ int main() {
         cin >> cmd;
         if(cmd == "push") {
             cin >> num;
-            dq.push_back(num);
+            q.push(num);
         } else if(cmd == "pop") {
-            if(dq.empty()) {
+            if(q.empty()) {
                 cout << "-1\n";
             } else {
-                cout << dq.front() << "\n";
-                dq.pop_front();
+                cout << q.front() << "\n";
+                q.pop();
             }
         } else if(cmd == "size") {
-            cout << dq.size() << "\n";
+            cout << q.size() << "\n";
         } else if(cmd == "empty") {
-            if(dq.empty()) {
+            if(q.empty()) {
                 cout << "1\n";
             } else {
                 cout << "0\n";
             }
         } else if(cmd == "front") {
-            if(dq.empty()) {
+            if(q.empty()) {
                 cout << "-1\n";
             } else {
-                cout << dq.front() << "\n";
+                cout << q.front() << "\n";
             }
         } else if(cmd == "back") {
-            if(dq.empty()) {
+            if(q.empty()) {
                 cout << "-1\n";
             } else {
-                cout << dq.back() << "\n";
+                cout << q.back() << "\n";
             }
         }
     }
