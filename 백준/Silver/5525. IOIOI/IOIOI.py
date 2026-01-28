@@ -2,27 +2,21 @@ N = int(input())
 M = int(input())
 S = input()
 
-check = False
+idx = 0
+cur = 0
 ans = 0
 
-for i in range(M - (2 * N + 1) + 1):
-    if S[i] == 'I':
-        check = False
-        cur = 'I'
-        for j in range(1, 2 * N + 1):
-            if cur == 'I':
-                if S[i + j] == 'I':
-                    check = True
-                    break
-                else:
-                    cur = 'O'
-            else:
-                if S[i + j] == 'O':
-                    check = True
-                    break
-                else:
-                    cur = 'I'
-    if S[i] == 'I' and not check:
-        ans += 1
+while True:
+    if idx > M - 1 - 2:
+        break
+    if S[idx] == 'I' and S[idx + 1] == 'O' and S[idx + 2] == 'I':
+        cur += 1
+        if cur >= N:
+            ans += 1
+        idx += 2
+    else:
+        cur = 0
+        idx += 1
+        
         
 print(ans)
