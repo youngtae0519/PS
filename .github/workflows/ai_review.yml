@@ -4,11 +4,13 @@ on:
   push:
     branches:
       - main
-    # 1. 파이썬 파일이 변경될 때만 실행 (가장 중요: API 호출 낭비 방지)
     paths:
       - '**.py'
-  # 2. 필요할 때 버튼을 눌러 수동으로 실행 가능하게 설정
   workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
 
 jobs:
   review:
@@ -17,7 +19,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # 변경 사항 비교를 위해 fetch-depth 설정
           fetch-depth: 2
 
       - name: Prepare Code Content
@@ -31,39 +32,61 @@ jobs:
             exit 0
           fi
 
-          # 임시 파일에 코드 데이터 작성
+          # 1. 오늘 날짜 생성
+          echo "review_date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+          # 2. 백준허브 폴더명에서 문제 정보 추출 (예: 10869. 사칙연산)
+          FIRST_FILE=$(echo $FILES | awk '{print $1}')
+          DIR_NAME=$(dirname "$FIRST_FILE")
+          PROBLEM_INFO=$(basename "$DIR_NAME")
+          echo "title_info=$PROBLEM_INFO" >> $GITHUB_OUTPUT
+
+          # 코드 내용 병합
           echo "CODE_DATA<<EOF" > code_content.txt
           for file in $FILES; do
-            echo "--- FILE_PATH: $file ---" >> code_content.txt
+            echo "### FILE_PATH: $file ###" >> code_content.txt
             cat "$file" >> code_content.txt
             echo -e "\n" >> code_content.txt
           done
           echo "EOF" >> code_content.txt
 
-          # 1. 환경 변수가 아닌 OUTPUT으로 전달 (더 안정적임)
           cat code_content.txt >> $GITHUB_OUTPUT
           echo "has_files=true" >> $GITHUB_OUTPUT
 
       - name: AI Review
-        # 변경된 파이썬 파일이 있을 때만 실행
         if: steps.prepare.outputs.has_files == 'true'
+        id: gemini
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          # 3. 모델명을 명확하게 지정 (Flash 모델이 무료 할당량이 더 넉넉합니다)
-          gemini_model: "gemini-2.5-flash"
+          gemini_model: "gemini-1.5-flash" # 속도와 안정성을 위해 Flash 모델 사용
           prompt: |
-            너는 백준 알고리즘 전문가이자 파이썬 전문가야. 아래 [코드]를 리뷰해줘.
-            파일 경로에 있는 숫자가 문제 번호야.
+            너는 백준 알고리즘 전문가이자 파이썬 마스터야. 아래 [코드]를 리뷰해줘.
+            파일 경로에 있는 숫자가 백준 문제 번호야.
 
             [코드]
             ${{ steps.prepare.outputs.CODE_DATA }}
 
             [리뷰 미션]
-            1. 파일 경로에서 문제 번호를 파악하고, 해당 문제의 '알고리즘 분류'와 '시간/메모리 제한'을 먼저 언급해줘.
-            2. 현재 코드가 해당 문제의 최적 알고리즘을 정확히 사용했는지 분석해줘.
-            3. 데이터 범위(N)를 고려해 시간 초과(TLE) 가능성을 검증해줘.
-            4. Pythonic한 방식이나 효율적인 내장 모듈(heapq, deque 등) 활용 방안을 추천해줘.
-            5. 놓치기 쉬운 예외 상황(Edge Case)을 제시해줘.
+            1. 문제 번호에 따른 '알고리즘 분류'와 '시간/메모리 제한' 언급.
+            2. 현재 코드의 알고리즘 효율성 분석 및 시간 초과 가능성 검토.
+            3. 더 효율적이거나 Pythonic한 개선안 제안.
+            4. 놓치기 쉬운 반례(Edge Case) 제시.
 
             답변은 한국어로 "총평 - 분석 - 개선안 - 반례" 순서로 가독성 있게 작성해줘.
+
+      - name: Create Issue
+        if: steps.prepare.outputs.has_files == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const review = `${{ steps.gemini.outputs.text }}`;
+            const date = "${{ steps.prepare.outputs.review_date }}";
+            const problem = "${{ steps.prepare.outputs.title_info }}";
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[${date}] AI 리뷰: ${problem}`,
+              body: "## 🤖 Gemini 알고리즘 분석 결과\n\n" + review,
+              labels: ['code-review', 'algorithm']
+            });
