@@ -20,25 +20,44 @@ jobs:
           # 변경 사항 비교를 위해 fetch-depth 설정
           fetch-depth: 2
 
-      - name: Get changed files
-        id: files
+      - name: Prepare Code Content
+        id: prepare
         run: |
           git config core.quotepath false
-          # 새로 추가(A)되거나 수정(M)된 .py 파일만 추출
-          FILES=$(git diff --name-only --diff-filter=AM HEAD^ HEAD | grep '\.py' | xargs)
-          echo "changed_files=$FILES" >> $GITHUB_OUTPUT
+          FILES=$(git diff --name-only --diff-filter=AM HEAD^ HEAD | grep '\.py' || true)
+          
+          if [ -z "$FILES" ]; then
+            echo "has_files=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 임시 파일에 코드 데이터 작성
+          echo "CODE_DATA<<EOF" > code_content.txt
+          for file in $FILES; do
+            echo "--- FILE_PATH: $file ---" >> code_content.txt
+            cat "$file" >> code_content.txt
+            echo -e "\n" >> code_content.txt
+          done
+          echo "EOF" >> code_content.txt
+
+          # 1. 환경 변수가 아닌 OUTPUT으로 전달 (더 안정적임)
+          cat code_content.txt >> $GITHUB_OUTPUT
+          echo "has_files=true" >> $GITHUB_OUTPUT
 
       - name: AI Review
         # 변경된 파이썬 파일이 있을 때만 실행
-        if: steps.files.outputs.changed_files != ''
+        if: steps.prepare.outputs.has_files == 'true'
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           # 3. 모델명을 명확하게 지정 (Flash 모델이 무료 할당량이 더 넉넉합니다)
           gemini_model: "gemini-2.5-flash"
           prompt: |
-            너는 알고리즘 문제 해결(PS) 전문가이자 파이썬 마스터야. 
-            현재 제출된 파일의 경로(File Path)에는 백준 문제 번호가 포함되어 있어.
+            너는 백준 알고리즘 전문가이자 파이썬 전문가야. 아래 [코드]를 리뷰해줘.
+            파일 경로에 있는 숫자가 문제 번호야.
+
+            [코드]
+            ${{ steps.prepare.outputs.CODE_DATA }}
 
             [리뷰 미션]
             1. 파일 경로에서 문제 번호를 파악하고, 해당 문제의 '알고리즘 분류'와 '시간/메모리 제한'을 먼저 언급해줘.
@@ -48,4 +67,3 @@ jobs:
             5. 놓치기 쉬운 예외 상황(Edge Case)을 제시해줘.
 
             답변은 한국어로 "총평 - 분석 - 개선안 - 반례" 순서로 가독성 있게 작성해줘.
-          files: ${{ steps.files.outputs.changed_files }}
