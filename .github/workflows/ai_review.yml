@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Prepare Code Content
+      - name: Prepare Code and Fetch Problem Info
         id: prepare
         run: |
           git config core.quotepath false
@@ -32,76 +32,108 @@ jobs:
             exit 0
           fi
 
-          # 1. 오늘 날짜 생성
+          # 기본 정보 추출
           echo "review_date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
-          # 2. 백준허브 폴더명에서 문제 정보 추출 (예: 10869. 사칙연산)
           FIRST_FILE=$(echo $FILES | awk '{print $1}')
-          DIR_NAME=$(dirname "$FIRST_FILE")
-          PROBLEM_INFO=$(basename "$DIR_NAME")
+          PROBLEM_INFO=$(basename "$(dirname "$FIRST_FILE")")
           echo "title_info=$PROBLEM_INFO" >> $GITHUB_OUTPUT
 
-          # 코드 내용 병합
-          echo "CODE_DATA<<EOF" > code_content.txt
-          for file in $FILES; do
-            echo "### FILE_PATH: $file ###" >> code_content.txt
-            cat "$file" >> code_content.txt
-            echo -e "\n" >> code_content.txt
-          done
-          echo "EOF" >> code_content.txt
+          # 문제 번호 추출 (예: 15552. 빠른 A+B -> 15552)
+          PROBLEM_NO=$(echo $PROBLEM_INFO | cut -d'.' -f1 | tr -d ' ')
+          echo "prob_no=$PROBLEM_NO" >> $GITHUB_OUTPUT
 
-          cat code_content.txt >> $GITHUB_OUTPUT
+          # 1. solved.ac API 호출 (난이도 및 태그)
+          RESPONSE=$(curl -s "https://solved.ac/api/v3/problem/show?problemId=$PROBLEM_NO")
+          LEVEL=$(echo $RESPONSE | jq -r '.level')
+          TAGS=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')
+          
+          echo "prob_level=$LEVEL" >> $GITHUB_OUTPUT
+          echo "algo_tags=$TAGS" >> $GITHUB_OUTPUT
+
+          # 2. 코드 및 프롬프트 파일 저장
+          echo "### 제출한 코드 내용 ###" > submitted_code.txt
+          for file in $FILES; do
+            echo -e "\n--- FILE: $file ---\n" >> submitted_code.txt
+            cat "$file" >> submitted_code.txt
+          done
+
+          echo "너는 백준 전문가이자 파이썬 마스터야. 아래 [코드]를 리뷰해줘." > full_prompt.txt
+          echo -e "\n[코드]\n" >> full_prompt.txt
+          cat submitted_code.txt >> full_prompt.txt
+          echo -e "\n[리뷰 미션]\n0. 문제 요약\n1. 알고리즘 분류 및 제한 사항\n2. 효율성 분석 및 TLE 가능성\n3. 개선안\n4. 반례\n답변은 한국어로 작성해줘." >> full_prompt.txt
+          
           echo "has_files=true" >> $GITHUB_OUTPUT
 
       - name: AI Review
         if: steps.prepare.outputs.has_files == 'true'
-        id: gemini
-        uses: google-github-actions/run-gemini-cli@v0
-        with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          gemini_model: "gemini-2.5-flash"
-          prompt: |
-            너는 백준 알고리즘 전문가이자 파이썬 마스터야. 아래 [코드]를 리뷰해줘.
-            파일 경로(FILE_PATH)에 있는 숫자가 백준 문제 번호야.
+        run: |
+          npm install -g @google/gemini-cli
+          gemini --gemini_api_key "${{ secrets.GEMINI_API_KEY }}" \
+                 --gemini_model "gemini-1.5-flash" \
+                 --prompt "$(cat full_prompt.txt)" > review_result.txt
 
-            [코드]
-            ${{ steps.prepare.outputs.CODE_DATA }}
-
-            [리뷰 미션]
-            0. **문제 요약**: 파일 경로의 문제 번호를 바탕으로, 해당 문제가 무엇을 요구하는지(입력, 출력, 핵심 조건) 한 문단으로 요약해줘.
-            1. 문제 번호에 따른 '알고리즘 분류'와 '시간/메모리 제한' 언급.
-            2. 현재 코드의 알고리즘 효율성 분석 및 시간 초과 가능성 검토.
-            3. 더 효율적이거나 Pythonic한 개선안 제안.
-            4. 놓치기 쉬운 반례(Edge Case) 제시.
-
-            답변은 한국어로 "**문제 요약** - 총평 - 분석 - 개선안 - 반례" 순서로 가독성 있게 작성해줘.
-            모든 분석은 핵심 위주로 간결하게 작성하고, 서술형보다는 개조식(Bullet point)을 주로 사용해줘. 특히 이미 효율적인 부분에 대한 칭찬보다는 '개선할 점'에 집중해줘
-
-      - name: Create Issue
+      - name: Create Issue with Colors and Template
         if: steps.prepare.outputs.has_files == 'true'
         uses: actions/github-script@v7
-        env:
-          SUBMITTED_CODE: |-
-            ${{ steps.prepare.outputs.CODE_DATA }}
-          GEMINI_RESPONSE: |-
-            ${{ steps.gemini.outputs.text }}
         with:
           script: |
-            const code = process.env.SUBMITTED_CODE;
-            const review = process.env.GEMINI_RESPONSE;
-            const date = "${{ steps.prepare.outputs.review_date }}";
-            const problem = "${{ steps.prepare.outputs.title_info }}";
+            const fs = require('fs');
+            const code = fs.readFileSync('submitted_code.txt', 'utf8');
+            const review = fs.readFileSync('review_result.txt', 'utf8');
             
-            // 문제 링크 자동 생성 (백준 문제 번호 추출 가정)
-            const problemNo = problem.split('.')[0] || "";
-            const problemLink = problemNo ? `\n\n**문제 링크:** https://www.acmicpc.net/problem/${problemNo}` : "";
+            // 3. 난이도별 공식 색상 설정 (Hex)
+            const tierColors = {
+              "Bronze": "ad5600",
+              "Silver": "435f7a",
+              "Gold": "ec9a00",
+              "Platinum": "27e2a4",
+              "Diamond": "00b4fc",
+              "Ruby": "ff0062",
+              "Unrated": "2d2d2d"
+            };
 
-            const bodyContent = `## 📝 제출한 코드\n\n${code}\n\n---\n\n## 🤖 Gemini 알고리즘 분석 결과${problemLink}\n\n${review}`;
+            const getTierInfo = (level) => {
+              if (level === 0) return { name: "Unrated", color: tierColors["Unrated"] };
+              const tiers = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ruby"];
+              const roman = ["V", "IV", "III", "II", "I"];
+              const tierIdx = Math.floor((level - 1) / 5);
+              const rankIdx = (level - 1) % 5;
+              return { 
+                name: `${tiers[tierIdx]} ${roman[4 - rankIdx]}`, 
+                color: tierColors[tiers[tierIdx]] 
+              };
+            };
 
-            await github.rest.issues.create({
+            const tier = getTierInfo(parseInt("${{ steps.prepare.outputs.prob_level }}"));
+            
+            // 라벨 생성/확인 함수
+            const ensureLabel = async (name, color) => {
+              try {
+                await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name });
+              } catch (e) {
+                await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name, color: color });
+              }
+            };
+
+            await ensureLabel(tier.name, tier.color);
+            await ensureLabel('code-review', '1d76db');
+
+            const algoTags = "${{ steps.prepare.outputs.algo_tags }}".split(',').filter(t => t);
+            for (const tag of algoTags) { await ensureLabel(tag, 'ededed'); }
+
+            // 4. 이슈 생성
+            const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `[${date}] AI 리뷰: ${problem}`,
-              body: bodyContent,
-              labels: ['code-review', 'algorithm']
+              title: `[${{ steps.prepare.outputs.review_date }}] AI 리뷰: ${{ steps.prepare.outputs.title_info }}`,
+              body: `## 📝 제출 코드\n\n\`\`\`python\n${code}\n\`\`\`\n\n---\n\n## 🤖 AI 분석 결과\n**난이도:** ${tier.name}\n**링크:** https://www.acmicpc.net/problem/${{ steps.prepare.outputs.prob_no }}\n\n${review}`,
+              labels: [tier.name, ...algoTags, 'code-review']
+            });
+
+            // 5. 복기 댓글 템플릿 달기
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.data.number,
+              body: `### ✍️ 오늘의 복기 기록\n\n**1. 핵심 로직**\n- \n\n**2. 시행착오**\n- \n\n**3. 새롭게 알게 된 팁**\n-  `
             });
