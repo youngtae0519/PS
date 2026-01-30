@@ -22,7 +22,7 @@ jobs:
 
       - name: AI Review
         if: steps.files.outputs.changed_files != ''
-        uses: google-gemini/gemini-github-action@v1.1.0
+        uses: google-github-actions/run-gemini-cli@v0
         with:
           api-key: ${{ secrets.GEMINI_API_KEY }}
           # 리뷰 요청 프롬프트
