@@ -27,6 +27,7 @@ jobs:
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          model: gemini-1.5-flash
           # 퀄리티를 극대화한 프롬프트
           prompt: |
             너는 알고리즘 문제 해결(PS) 전문가이자 파이썬 마스터야. 
