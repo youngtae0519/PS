@@ -59,7 +59,7 @@ jobs:
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          gemini_model: "gemini-1.5-flash" # 속도와 안정성을 위해 Flash 모델 사용
+          gemini_model: "gemini-2.5-flash" # 속도와 안정성을 위해 Flash 모델 사용
           prompt: |
             너는 백준 알고리즘 전문가이자 파이썬 마스터야. 아래 [코드]를 리뷰해줘.
             파일 경로에 있는 숫자가 백준 문제 번호야.
