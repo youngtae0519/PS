@@ -3,7 +3,7 @@ name: Algorithm Code Review
 on:
   push:
     branches:
-      - main  # 백준허브가 푸시하는 브랜치명 확인 (main 또는 master)
+      - main
 
 jobs:
   review:
@@ -17,61 +17,27 @@ jobs:
       - name: Get changed files
         id: files
         run: |
-          # 새로 추가되거나 수정된 .py 파일만 추출
-          echo "changed_files=$(git diff --name-only HEAD^ HEAD | grep '\.py' | xargs)" >> $GITHUB_OUTPUT
+          # 한글 경로 깨짐 방지 설정
+          git config core.quotepath false
+          FILES=$(git diff --name-only HEAD^ HEAD | grep '\.py' | xargs)
+          echo "changed_files=$FILES" >> $GITHUB_OUTPUT
 
-      - name: Install dependencies
-        run: pip install -q -U google-generativeai
-
-      - name: AI Review using Python
+      - name: AI Review
         if: steps.files.outputs.changed_files != ''
-        env:
-          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          python -c "
-          import google.generativeai as genai
-          import os
+        uses: google-github-actions/run-gemini-cli@v0
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          # 퀄리티를 극대화한 프롬프트
+          prompt: |
+            너는 알고리즘 문제 해결(PS) 전문가이자 파이썬 마스터야. 
+            현재 제출된 파일의 경로(File Path)에는 백준 문제 번호가 포함되어 있어.
 
-          # 1. Gemini 설정
-          genai.configure(api_key=os.environ['GOOGLE_API_KEY'])
-          model = genai.GenerativeModel('gemini-1.5-flash')
+            [리뷰 미션]
+            1. 파일 경로에서 문제 번호를 파악하고, 해당 문제의 '알고리즘 분류'와 '시간/메모리 제한'을 먼저 언급해줘.
+            2. 현재 코드가 해당 문제의 최적 알고리즘(예: DP, 그리디, 스택 등)을 정확히 사용했는지 분석해줘.
+            3. 데이터의 범위(N의 크기)를 고려했을 때, 최악의 경우에도 시간 초과(TLE)가 발생하지 않을지 검증해줘.
+            4. 더 파이썬다운(Pythonic) 방식이나 효율적인 내장 모듈(heapq, deque 등)의 활용 방안을 추천해줘.
+            5. 문제를 풀 때 놓치기 쉬운 예외 상황(Edge Case)을 제시해줘.
 
-          changed_files = '${{ steps.files.outputs.changed_files }}'.split()
-          
-          for file_path in changed_files:
-              # 2. 파일 내용 읽기
-              with open(file_path, 'r', encoding='utf-8') as f:
-                  code = f.read()
-              
-              # 3. 문제 번호를 포함한 고도화된 프롬프트 구성
-              prompt = f'''
-          너는 구글 코리아 출신의 알고리즘 문제 해결(PS) 전문가야. 
-          아래 정보를 바탕으로 제출된 파이썬 코드를 엄격하게 리뷰해줘.
-
-          [문제 정보]
-          파일 경로: {file_path} 
-          (경로에 포함된 문제 번호와 제목을 참고해서 해당 문제의 제약 조건을 파악해줘.)
-
-          [제출 코드]
-          {code}
-
-          [리뷰 가이드라인]
-          1. 시간/공간 복잡도: 문제의 N 범위에 비추어 최적인가? (예: N이 10만이면 O(N log N) 이하인지 등)
-          2. 최적화: 더 효율적인 알고리즘이나 자료구조(heapq, deque 등) 제안이 필요한가?
-          3. Pythonic Code: 파이썬다운 간결한 문법을 썼는가? (List Comprehension, 내장 함수 활용 등)
-          4. 결함 가능성: 엣지 케이스(입력이 1개일 때 등)에서 발생할 수 있는 오류가 있는가?
-
-          답변은 한국어로, 핵심 위주로 번호를 매겨서 친절하게 작성해줘.
-          '''
-              
-              # 4. AI 리뷰 생성 및 출력
-              response = model.generate_content(prompt)
-              print(f'### 📝 Review for: {file_path}')
-              print(response.text)
-              print('\n' + '='*50 + '\n')
-
-              # 5. GitHub Action 요약 페이지에도 추가
-              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
-                  summary.write(f'## 📝 {file_path} 리뷰 결과\n')
-                  summary.write(response.text + '\n\n')
-          "
+            답변은 한국어로 "총평 - 분석 - 개선안 - 반례" 순서로 가독성 있게 작성해줘.
+          files: ${{ steps.files.outputs.changed_files }}
