@@ -32,47 +32,56 @@ jobs:
             exit 0
           fi
 
-          # 기본 정보 추출
           echo "review_date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
           FIRST_FILE=$(echo $FILES | awk '{print $1}')
           PROBLEM_INFO=$(basename "$(dirname "$FIRST_FILE")")
           echo "title_info=$PROBLEM_INFO" >> $GITHUB_OUTPUT
-
-          # 문제 번호 추출 (예: 15552. 빠른 A+B -> 15552)
           PROBLEM_NO=$(echo $PROBLEM_INFO | cut -d'.' -f1 | tr -d ' ')
           echo "prob_no=$PROBLEM_NO" >> $GITHUB_OUTPUT
 
-          # 1. solved.ac API 호출 (난이도 및 태그)
           RESPONSE=$(curl -s "https://solved.ac/api/v3/problem/show?problemId=$PROBLEM_NO")
-          LEVEL=$(echo $RESPONSE | jq -r '.level')
-          TAGS=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')
-          
-          echo "prob_level=$LEVEL" >> $GITHUB_OUTPUT
-          echo "algo_tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "prob_level=$(echo $RESPONSE | jq -r '.level')" >> $GITHUB_OUTPUT
+          echo "algo_tags=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
 
-          # 2. 코드 및 프롬프트 파일 저장
-          echo "### 제출한 코드 내용 ###" > submitted_code.txt
-          for file in $FILES; do
-            echo -e "\n--- FILE: $file ---\n" >> submitted_code.txt
-            cat "$file" >> submitted_code.txt
-          done
+          echo "### 제출 코드 ###" > submitted_code.txt
+          cat "$FIRST_FILE" >> submitted_code.txt
 
-          echo "너는 백준 전문가이자 파이썬 마스터야. 아래 [코드]를 리뷰해줘." > full_prompt.txt
-          echo -e "\n[코드]\n" >> full_prompt.txt
-          cat submitted_code.txt >> full_prompt.txt
-          echo -e "\n[리뷰 미션]\n0. 문제 요약\n1. 알고리즘 분류 및 제한 사항\n2. 효율성 분석 및 TLE 가능성\n3. 개선안\n4. 반례\n답변은 한국어로 작성해줘." >> full_prompt.txt
+          # 1. 핵심 위주, 개선점 집중, 개조식 프롬프트 구성
+          cat <<EOF > full_prompt.txt
+          너는 알고리즘 효율성과 파이썬 성능 최적화의 대가야. 
+          제공된 [코드]를 분석하고, 다음 지침에 따라 리뷰를 작성해.
           
+          [작성 원칙]
+          - 모든 분석은 핵심 위주로 아주 간결하게 작성할 것.
+          - 서술형 문장을 지양하고, 반드시 개조식(Bullet point)을 사용할 것.
+          - 이미 효율적인 부분에 대한 칭찬이나 불필요한 미사여구는 절대 생략할 것.
+          - 오직 '개선할 점'과 '잠재적 위험'에만 집중할 것.
+          
+          [리뷰 미션]
+          0. **문제 요약**: 핵심 요구사항과 N의 범위를 한 줄로 요약.
+          1. **분석**: $O(N)$ 복잡도 진단 및 시간/메모리 제한 충족 여부 (불렛 포인트).
+          2. **개선할 점**: 
+             - 성능 병목 지점 및 메모리 낭비 요소 지적.
+             - 더 효율적인 라이브러리(heapq, deque 등) 및 최적화 기법 제안.
+          3. **반례 (Edge Case)**: 코드가 실패할 수 있는 경계값이나 특수 상황 제시.
+          
+          답변은 한국어로 "문제 요약 - 분석 - 개선안 - 반례" 순서로 작성해.
+          [코드]
+          $(cat submitted_code.txt)
+          EOF
           echo "has_files=true" >> $GITHUB_OUTPUT
 
       - name: AI Review
         if: steps.prepare.outputs.has_files == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           npm install -g @google/gemini-cli
-          gemini --gemini_api_key "${{ secrets.GEMINI_API_KEY }}" \
-                 --gemini_model "gemini-2.5-flash" \
+          # 2. 모델을 gemini-2.5-flash로 업데이트
+          gemini --model "gemini-2.5-flash" \
                  --prompt "$(cat full_prompt.txt)" > review_result.txt
 
-      - name: Create Issue with Colors and Template
+      - name: Create Issue
         if: steps.prepare.outputs.has_files == 'true'
         uses: actions/github-script@v7
         with:
@@ -81,59 +90,41 @@ jobs:
             const code = fs.readFileSync('submitted_code.txt', 'utf8');
             const review = fs.readFileSync('review_result.txt', 'utf8');
             
-            // 3. 난이도별 공식 색상 설정 (Hex)
             const tierColors = {
-              "Bronze": "ad5600",
-              "Silver": "435f7a",
-              "Gold": "ec9a00",
-              "Platinum": "27e2a4",
-              "Diamond": "00b4fc",
-              "Ruby": "ff0062",
-              "Unrated": "2d2d2d"
+              "Bronze": "ad5600", "Silver": "435f7a", "Gold": "ec9a00",
+              "Platinum": "27e2a4", "Diamond": "00b4fc", "Ruby": "ff0062", "Unrated": "2d2d2d"
             };
 
             const getTierInfo = (level) => {
-              if (level === 0) return { name: "Unrated", color: tierColors["Unrated"] };
               const tiers = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ruby"];
               const roman = ["V", "IV", "III", "II", "I"];
-              const tierIdx = Math.floor((level - 1) / 5);
-              const rankIdx = (level - 1) % 5;
+              if (level === 0) return { name: "Unrated", color: tierColors["Unrated"] };
               return { 
-                name: `${tiers[tierIdx]} ${roman[4 - rankIdx]}`, 
-                color: tierColors[tiers[tierIdx]] 
+                name: `${tiers[Math.floor((level-1)/5)]} ${roman[4-(level-1)%5]}`, 
+                color: tierColors[tiers[Math.floor((level-1)/5)]] 
               };
             };
 
             const tier = getTierInfo(parseInt("${{ steps.prepare.outputs.prob_level }}"));
-            
-            // 라벨 생성/확인 함수
             const ensureLabel = async (name, color) => {
-              try {
-                await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name });
-              } catch (e) {
-                await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name, color: color });
-              }
+              try { await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name }); }
+              catch (e) { await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name, color: color }); }
             };
 
             await ensureLabel(tier.name, tier.color);
             await ensureLabel('code-review', '1d76db');
-
             const algoTags = "${{ steps.prepare.outputs.algo_tags }}".split(',').filter(t => t);
             for (const tag of algoTags) { await ensureLabel(tag, 'ededed'); }
 
-            // 4. 이슈 생성
             const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner: context.repo.owner, repo: context.repo.repo,
               title: `[${{ steps.prepare.outputs.review_date }}] AI 리뷰: ${{ steps.prepare.outputs.title_info }}`,
-              body: `## 📝 제출 코드\n\n\`\`\`python\n${code}\n\`\`\`\n\n---\n\n## 🤖 AI 분석 결과\n**난이도:** ${tier.name}\n**링크:** https://www.acmicpc.net/problem/${{ steps.prepare.outputs.prob_no }}\n\n${review}`,
+              body: `## 📝 제출 코드\n\n\`\`\`python\n${code}\n\`\`\`\n\n---\n\n## 🤖 AI 분석 결과\n**난이도:** ${tier.name} | **링크:** https://www.acmicpc.net/problem/${{ steps.prepare.outputs.prob_no }}\n\n${review}`,
               labels: [tier.name, ...algoTags, 'code-review']
             });
 
-            // 5. 복기 댓글 템플릿 달기
+            // 3. 댓글 템플릿 수정 (다짐 제거)
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.data.number,
-              body: `### ✍️ 오늘의 복기 기록\n\n**1. 핵심 로직**\n- \n\n**2. 시행착오**\n- \n\n**3. 새롭게 알게 된 팁**\n-  `
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.data.number,
+              body: "### ✍️ 오늘의 복기 기록\n\n**1. 핵심 로직**\n- \n\n**2. 시행착오**\n- \n\n**3. 새롭게 알게 된 팁**\n- "
             });
