@@ -24,7 +24,7 @@ jobs:
         if: steps.files.outputs.changed_files != ''
         uses: google-github-actions/run-gemini-cli@v0
         with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_api-key: ${{ secrets.GEMINI_API_KEY }}
           # 리뷰 요청 프롬프트
           prompt: |
             너는 알고리즘 전문가야. 다음 파이썬 코드를 리뷰해줘.
