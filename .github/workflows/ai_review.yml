@@ -1,0 +1,36 @@
+name: Algorithm Code Review
+
+on:
+  push:
+    branches:
+      - main  # 또는 master. 백준허브가 푸시하는 브랜치 이름
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # 이전 코드와 비교하기 위해 필요
+
+      - name: Get changed files
+        id: files
+        run: |
+          # 새로 추가되거나 수정된 .py 파일만 찾기
+          echo "changed_files=$(git diff --name-only HEAD^ HEAD | grep '\.py' | xargs)" >> $GITHUB_OUTPUT
+
+      - name: AI Review
+        if: steps.files.outputs.changed_files != ''
+        uses: google-gemini/gemini-github-action@v1.1.0
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          # 리뷰 요청 프롬프트
+          prompt: |
+            너는 알고리즘 전문가야. 다음 파이썬 코드를 리뷰해줘.
+            1. 시간 복잡도와 공간 복잡도가 적절한가?
+            2. 더 효율적인 알고리즘이나 파이썬다운(Pythonic) 표현이 있는가?
+            3. 가독성을 높일 수 있는 팁은?
+            답변은 한국어로 친절하게 해줘.
+          # 분석할 파일들
+          files: ${{ steps.files.outputs.changed_files }}
