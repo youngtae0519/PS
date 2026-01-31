@@ -36,37 +36,42 @@ jobs:
           FIRST_FILE=$(echo $FILES | awk '{print $1}')
           PROBLEM_INFO=$(basename "$(dirname "$FIRST_FILE")")
           echo "title_info=$PROBLEM_INFO" >> $GITHUB_OUTPUT
+          
+          # 문제 번호 추출
           PROBLEM_NO=$(echo $PROBLEM_INFO | cut -d'.' -f1 | tr -d ' ')
           echo "prob_no=$PROBLEM_NO" >> $GITHUB_OUTPUT
 
+          # Solved.ac API 호출
           RESPONSE=$(curl -s "https://solved.ac/api/v3/problem/show?problemId=$PROBLEM_NO")
-          echo "prob_level=$(echo $RESPONSE | jq -r '.level')" >> $GITHUB_OUTPUT
-          echo "algo_tags=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+          PROB_LEVEL=$(echo $RESPONSE | jq -r '.level')
+          ALGO_TAGS=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')
+          
+          echo "prob_level=$PROB_LEVEL" >> $GITHUB_OUTPUT
+          echo "algo_tags=$ALGO_TAGS" >> $GITHUB_OUTPUT
 
           echo "### 제출 코드 ###" > submitted_code.txt
           cat "$FIRST_FILE" >> submitted_code.txt
-
-          # 1. 핵심 위주, 개선점 집중, 개조식 프롬프트 구성
+          
+          # 1. 프롬프트 구성 (Context 에러 방지를 위해 쉘 변수 사용)
           cat <<EOF > full_prompt.txt
           너는 알고리즘 효율성과 파이썬 성능 최적화의 대가야. 
-          제공된 [코드]를 분석하고, 다음 지침에 따라 리뷰를 작성해.
+          현재 분석 중인 문제는 백준 ${PROBLEM_NO}번이며, 알고리즘 분류는 [${ALGO_TAGS}]야.
           
           [작성 원칙]
+          - 반드시 백준 ${PROBLEM_NO}번 문제의 실제 제약 조건(N, M 범위, 시간 제한 등)을 바탕으로 분석할 것.
           - 모든 분석은 핵심 위주로 아주 간결하게 작성할 것.
-          - 서술형 문장을 지양하고, 반드시 개조식(Bullet point)을 사용할 것.
-          - 이미 효율적인 부분에 대한 칭찬이나 불필요한 미사여구는 절대 생략할 것.
-          - 오직 '개선할 점'과 '잠재적 위험'에만 집중할 것.
+          - 반드시 개조식(Bullet point)을 사용할 것.
+          - 이미 잘 구현된 부분에 대한 칭찬은 생략하고, '개선할 점'과 '잠재적 위험'에만 집중할 것.
           
           [리뷰 미션]
-          0. **문제 요약**: 핵심 요구사항과 N의 범위를 한 줄로 요약.
-          1. **분석**: $O(N)$ 복잡도 진단 및 시간/메모리 제한 충족 여부 (불렛 포인트).
-          2. **개선할 점**: 
-             - 성능 병목 지점 및 메모리 낭비 요소 지적.
-             - 더 효율적인 라이브러리(heapq, deque 등) 및 최적화 기법 제안.
+          0. **문제 요약**: 백준 ${PROBLEM_NO}번의 핵심 요구사항과 실제 N, M 범위를 한 줄 요약.
+          1. **분석**: 실제 제한 대비 현재 코드의 시간/공간 복잡도 진단 (불렛 포인트).
+          2. **개선할 점**: 성능 병목 지점 지적 및 파이썬 특화 최적화 기법(sys.stdin, join 등) 제안.
           3. **반례 (Edge Case)**: 코드가 실패할 수 있는 경계값이나 특수 상황 제시.
           
           답변은 한국어로 "문제 요약 - 분석 - 개선안 - 반례" 순서로 작성해.
-          [코드]
+          
+          [제출된 코드]
           $(cat submitted_code.txt)
           EOF
           echo "has_files=true" >> $GITHUB_OUTPUT
@@ -77,7 +82,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           npm install -g @google/gemini-cli
-          # 2. 모델을 gemini-2.5-flash로 업데이트
           gemini --model "gemini-2.5-flash" \
                  --prompt "$(cat full_prompt.txt)" > review_result.txt
 
@@ -98,11 +102,10 @@ jobs:
             const getTierInfo = (level) => {
               const tiers = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ruby"];
               const roman = ["V", "IV", "III", "II", "I"];
-              
-              if (level === 0 || isNaN(level)) return { name: "Unrated", color: tierColors["Unrated"] };
+              if (!level || level === 0 || isNaN(level)) return { name: "Unrated", color: tierColors["Unrated"] };
               
               const tierIndex = Math.floor((level - 1) / 5);
-              const romanIndex = (level - 1) % 5; // 4에서 뺄 필요 없이 그대로 인덱스 사용
+              const romanIndex = (level - 1) % 5;
               
               return { 
                 name: `${tiers[tierIndex]} ${roman[romanIndex]}`, 
@@ -128,7 +131,6 @@ jobs:
               labels: [tier.name, ...algoTags, 'code-review']
             });
 
-            // 3. 댓글 템플릿 수정 (다짐 제거)
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.data.number,
               body: "### ✍️ 오늘의 복기 기록\n\n**1. 핵심 로직**\n- \n\n**2. 시행착오**\n- \n\n**3. 새롭게 알게 된 팁**\n- "
