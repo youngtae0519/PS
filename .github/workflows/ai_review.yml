@@ -98,10 +98,15 @@ jobs:
             const getTierInfo = (level) => {
               const tiers = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ruby"];
               const roman = ["V", "IV", "III", "II", "I"];
-              if (level === 0) return { name: "Unrated", color: tierColors["Unrated"] };
+              
+              if (level === 0 || isNaN(level)) return { name: "Unrated", color: tierColors["Unrated"] };
+              
+              const tierIndex = Math.floor((level - 1) / 5);
+              const romanIndex = (level - 1) % 5; // 4에서 뺄 필요 없이 그대로 인덱스 사용
+              
               return { 
-                name: `${tiers[Math.floor((level-1)/5)]} ${roman[4-(level-1)%5]}`, 
-                color: tierColors[tiers[Math.floor((level-1)/5)]] 
+                name: `${tiers[tierIndex]} ${roman[romanIndex]}`, 
+                color: tierColors[tiers[tierIndex]] 
               };
             };
 
