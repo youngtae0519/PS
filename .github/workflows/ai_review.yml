@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Prepare Code and Fetch Problem Info
+      - name: Prepare Basic Info
         id: prepare
         run: |
           git config core.quotepath false
@@ -37,44 +37,85 @@ jobs:
           PROBLEM_INFO=$(basename "$(dirname "$FIRST_FILE")")
           echo "title_info=$PROBLEM_INFO" >> $GITHUB_OUTPUT
           
-          # 문제 번호 추출
+          # 문제 번호 추출 (예: "1000.A+B" -> "1000")
           PROBLEM_NO=$(echo $PROBLEM_INFO | cut -d'.' -f1 | tr -d ' ')
           echo "prob_no=$PROBLEM_NO" >> $GITHUB_OUTPUT
 
-          # Solved.ac API 호출
+          # Solved.ac API 호출 (난이도 및 태그 정보)
           RESPONSE=$(curl -s "https://solved.ac/api/v3/problem/show?problemId=$PROBLEM_NO")
           PROB_LEVEL=$(echo $RESPONSE | jq -r '.level')
           ALGO_TAGS=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')
           
           echo "prob_level=$PROB_LEVEL" >> $GITHUB_OUTPUT
           echo "algo_tags=$ALGO_TAGS" >> $GITHUB_OUTPUT
+          echo "first_file=$FIRST_FILE" >> $GITHUB_OUTPUT
+          echo "has_files=true" >> $GITHUB_OUTPUT
 
-          echo "### 제출 코드 ###" > submitted_code.txt
-          cat "$FIRST_FILE" >> submitted_code.txt
+      - name: Fetch Problem Constraints (Crawling)
+        if: steps.prepare.outputs.has_files == 'true'
+        id: crawl
+        run: |
+          pip install requests beautifulsoup4
           
-          # 1. 프롬프트 구성 (Context 에러 방지를 위해 쉘 변수 사용)
+          python3 - <<EOF > problem_details.txt
+          import requests
+          from bs4 import BeautifulSoup
+          import os
+
+          prob_no = "${{ steps.prepare.outputs.prob_no }}"
+          url = f"https://www.acmicpc.net/problem/{prob_no}"
+          headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+          
+          try:
+              res = requests.get(url, headers=headers)
+              soup = BeautifulSoup(res.text, 'html.parser')
+              
+              # 시간/메모리 제한 테이블 추출
+              info_table = soup.select('#problem-info tr td')
+              time_limit = info_table[0].text.strip()
+              mem_limit = info_table[1].text.strip()
+              
+              # 입력 제약 사항 텍스트 추출
+              input_section = soup.select_one('#problem_input').text.strip()
+              
+              print(f"### 실제 문제 제약 조건 ###")
+              print(f"- 시간 제한: {time_limit}")
+              print(f"- 메모리 제한: {mem_limit}")
+              print(f"- 입력 설명 및 범위:\n{input_section}")
+          except Exception as e:
+              print(f"상세 정보를 가져오는 데 실패했습니다: {e}")
+          EOF
+
+      - name: Generate AI Prompt
+        if: steps.prepare.outputs.has_files == 'true'
+        run: |
+          PROBLEM_NO="${{ steps.prepare.outputs.prob_no }}"
+          ALGO_TAGS="${{ steps.prepare.outputs.algo_tags }}"
+          FIRST_FILE="${{ steps.prepare.outputs.first_file }}"
+          
           cat <<EOF > full_prompt.txt
           너는 알고리즘 효율성과 파이썬 성능 최적화의 대가야. 
           현재 분석 중인 문제는 백준 ${PROBLEM_NO}번이며, 알고리즘 분류는 [${ALGO_TAGS}]야.
-          
+
+          $(cat problem_details.txt)
+
           [작성 원칙]
-          - 반드시 백준 ${PROBLEM_NO}번 문제의 실제 제약 조건(N, M 범위, 시간 제한 등)을 바탕으로 분석할 것.
+          - 반드시 위에서 제공된 **실제 제약 조건(N, M 범위, 시간 제한 등)**을 바탕으로 분석할 것.
           - 모든 분석은 핵심 위주로 아주 간결하게 작성할 것.
           - 반드시 개조식(Bullet point)을 사용할 것.
-          - 이미 잘 구현된 부분에 대한 칭찬은 생략하고, '개선할 점'과 '잠재적 위험'에만 집중할 것.
-          
+          - 칭찬은 생략하고, '개선할 점'과 '잠재적 위험'에만 집중할 것.
+
           [리뷰 미션]
-          0. **문제 요약**: 백준 ${PROBLEM_NO}번의 핵심 요구사항과 실제 N, M 범위를 한 줄 요약.
-          1. **분석**: 실제 제한 대비 현재 코드의 시간/공간 복잡도 진단 (불렛 포인트).
-          2. **개선할 점**: 성능 병목 지점 지적 및 파이썬 특화 최적화 기법(sys.stdin, join 등) 제안.
+          0. **문제 요약**: 핵심 요구사항과 제약 조건을 한 줄 요약.
+          1. **분석**: 실제 제한 대비 현재 코드의 시간/공간 복잡도($O$ 표기법 사용) 진단.
+          2. **개선할 점**: 성능 병목 지점 지적 및 파이썬 특화 최적화 기법 제안.
           3. **반례 (Edge Case)**: 코드가 실패할 수 있는 경계값이나 특수 상황 제시.
-          
-          답변은 한국어로 "문제 요약 - 분석 - 개선안 - 반례" 순서로 작성해.
-          
+
+          답변은 한국어로 작성해.
+
           [제출된 코드]
-          $(cat submitted_code.txt)
+          $(cat $FIRST_FILE)
           EOF
-          echo "has_files=true" >> $GITHUB_OUTPUT
 
       - name: AI Review
         if: steps.prepare.outputs.has_files == 'true'
@@ -91,7 +132,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const code = fs.readFileSync('submitted_code.txt', 'utf8');
+            const code = fs.readFileSync("${{ steps.prepare.outputs.first_file }}", 'utf8');
             const review = fs.readFileSync('review_result.txt', 'utf8');
             
             const tierColors = {
@@ -103,32 +144,18 @@ jobs:
               const tiers = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ruby"];
               const roman = ["V", "IV", "III", "II", "I"];
               if (!level || level === 0 || isNaN(level)) return { name: "Unrated", color: tierColors["Unrated"] };
-              
               const tierIndex = Math.floor((level - 1) / 5);
               const romanIndex = (level - 1) % 5;
-              
-              return { 
-                name: `${tiers[tierIndex]} ${roman[romanIndex]}`, 
-                color: tierColors[tiers[tierIndex]] 
-              };
+              return { name: `${tiers[tierIndex]} ${roman[romanIndex]}`, color: tierColors[tiers[tierIndex]] };
             };
 
             const tier = getTierInfo(parseInt("${{ steps.prepare.outputs.prob_level }}"));
-            const ensureLabel = async (name, color) => {
-              try { await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name }); }
-              catch (e) { await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name, color: color }); }
-            };
-
-            await ensureLabel(tier.name, tier.color);
-            await ensureLabel('code-review', '1d76db');
-            const algoTags = "${{ steps.prepare.outputs.algo_tags }}".split(',').filter(t => t);
-            for (const tag of algoTags) { await ensureLabel(tag, 'ededed'); }
-
+            
             const issue = await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo,
               title: `[${{ steps.prepare.outputs.review_date }}] AI 리뷰: ${{ steps.prepare.outputs.title_info }}`,
               body: `## 📝 제출 코드\n\n\`\`\`python\n${code}\n\`\`\`\n\n---\n\n## 🤖 AI 분석 결과\n**난이도:** ${tier.name} | **링크:** https://www.acmicpc.net/problem/${{ steps.prepare.outputs.prob_no }}\n\n${review}`,
-              labels: [tier.name, ...algoTags, 'code-review']
+              labels: [tier.name, 'code-review']
             });
 
             await github.rest.issues.createComment({
