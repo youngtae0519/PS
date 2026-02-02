@@ -150,13 +150,20 @@ jobs:
             };
 
             const tier = getTierInfo(parseInt("${{ steps.prepare.outputs.prob_level }}"));
-            const tags = "${{ steps.prepare.outputs.algo_tags }}".split(',').filter(t => t.trim() !== "");
+            const ensureLabel = async (name, color) => {
+              try { await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name }); }
+              catch (e) { await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: name, color: color }); }
+            };
+
+            await ensureLabel(tier.name, tier.color);
+            const algoTags = "${{ steps.prepare.outputs.algo_tags }}".split(',').filter(t => t);
+            for (const tag of algoTags) { await ensureLabel(tag, 'ededed'); }
             
             const issue = await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo,
               title: `[${{ steps.prepare.outputs.review_date }}] AI 리뷰: ${{ steps.prepare.outputs.title_info }}`,
               body: `## 📝 제출 코드\n\n\`\`\`python\n${code}\n\`\`\`\n\n---\n\n## 🤖 AI 분석 결과\n**난이도:** ${tier.name} | **링크:** https://www.acmicpc.net/problem/${{ steps.prepare.outputs.prob_no }}\n\n${review}`,
-              labels: [tier.name, ...tags]
+              labels: [tier.name, ...algoTags]
             });
 
             await github.rest.issues.createComment({
