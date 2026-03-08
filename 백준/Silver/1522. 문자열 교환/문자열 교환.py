@@ -4,27 +4,24 @@ from collections import deque
 input = sys.stdin.readline
 
 S = input().rstrip()
+total = S.count('a')
+cur = deque(S[0: total])
+ans = cur.count('b')
+tmp = cur.count('b')
 
-cnt = S.count('a')
-
-if cnt > 0:
-    cur = deque(S[0 : cnt])
-    ans = cur.count('b')
-    tmp = cur.count('b')
-
-    for i in range(cnt, cnt + len(S) - 1):
-        if cur[0] == 'b':
+if total == 0:
+    ans = 0
+else:
+    for i in range(len(S)):
+        left = cur.popleft()
+        if left == 'b':
             tmp -= 1
         
-        cur.popleft()
-        
-        if S[i % len(S)] == 'b':
+        right = S[(i + total) % len(S)]
+        cur.append(right)
+        if right == 'b':
             tmp += 1
         
-        cur.append(S[i % len(S)])
-    
         ans = min(ans, tmp)
-else:
-    ans = 0
 
 print(ans)
