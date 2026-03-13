@@ -7,11 +7,11 @@ N, K = map(int, input().split())
 
 belt = list(map(int, input().rstrip().split()))
 dq = deque([])
-arr = [0 for _ in range(2 * N)]
-for idx, item in enumerate(belt):
+cnt = 0
+for item in belt:
     if item == 0:
-        arr[idx] = 1
-    dq.append([item, False, idx])
+        cnt += 1
+    dq.append([item, False])
 
 ans = 0
 while True:
@@ -25,7 +25,7 @@ while True:
             dq[i][1] = True
             dq[i][0] -=1
             if dq[i][0] == 0:
-                arr[dq[i][2]] = 1
+                cnt += 1
             dq[i - 1][1] = False
             
     dq[N - 1][1] = False
@@ -34,8 +34,8 @@ while True:
         dq[0][1] = True
         dq[0][0] -= 1
         if dq[0][0] == 0:
-            arr[dq[0][2]] = 1
+            cnt += 1
             
-    if sum(arr) >= K:
+    if cnt >= K:
         print(ans)
         break
