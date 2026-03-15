@@ -10,17 +10,18 @@ dq = deque([T])
 ans = 0
 
 while len(dq) > 0:
-    tmp = dq.popleft()
+    cur = dq.popleft()
     
-    if len(tmp) == len(S):
-        if tmp == S:
+    if len(cur) < len(S):
+        continue
+    elif len(cur) == len(S):
+        if cur == S:
             ans = 1
             break
+    else:
+        if cur[-1] == 'A':
+            dq.append(cur[:-1])
+        if cur[0] == 'B':
+            dq.append(cur[1:][::-1])
             
-    if len(tmp) > 0:
-        if tmp[-1] == 'A':
-            dq.append(tmp[:-1])
-        if tmp[0] == 'B':
-            dq.append(tmp[1:][::-1])
-            
-print(ans)     
+print(ans)
