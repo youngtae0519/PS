@@ -13,22 +13,17 @@ for _ in range(M):
     
 dist = [float('inf') for _ in range(N + 1)]
 dist[1] = 0
-pq = []
+pq = [(0, 1)]
 
-for nv, nw in graph[1]:
-    heapq.heappush(pq, (nw, nv))
-
-while len(pq) > 0:
-    cur = heapq.heappop(pq)
-    w, v = cur[0], cur[1]
+while pq:
+    w, v = heapq.heappop(pq)
     
     if dist[v] < w:
         continue
-        
-    dist[v] = w
 
     for nv, nw in graph[v]:
         if dist[v] + nw < dist[nv]:
+            dist[nv] = dist[v] + nw
             heapq.heappush(pq, (dist[v] + nw, nv))
             
 print(dist[N])
