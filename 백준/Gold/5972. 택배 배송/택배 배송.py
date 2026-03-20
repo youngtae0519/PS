@@ -11,24 +11,24 @@ for _ in range(M):
     graph[u].append([v, w])
     graph[v].append([u, w])
     
-visited = [float('inf') for _ in range(N + 1)]
-visited[1] = 0
+dist = [float('inf') for _ in range(N + 1)]
+dist[1] = 0
 pq = []
 
 for nv, nw in graph[1]:
-    heapq.heappush(pq, (nw, 1, nv))
+    heapq.heappush(pq, (nw, nv))
 
 while len(pq) > 0:
     cur = heapq.heappop(pq)
-    w, u, v = cur[0], cur[1], cur[2]
+    w, v = cur[0], cur[1]
     
-    if visited[u] + w > visited[v]:
+    if dist[v] < w:
         continue
         
-    visited[v] = visited[u] + w
+    dist[v] = w
 
     for nv, nw in graph[v]:
-        if visited[v] + nw < visited[nv]:
-            heapq.heappush(pq, (nw, v, nv))
+        if dist[v] + nw < dist[nv]:
+            heapq.heappush(pq, (dist[v] + nw, nv))
             
-print(visited[N])
+print(dist[N])
