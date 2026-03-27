@@ -33,17 +33,25 @@ def cal(operations, N):
 def dfs(cur, N, operations, expressions):
     if cur == N:
         if cal(operations, N) == 0:
-            results.append(expressions + str(N))
+            results.append(''.join(expressions) + str(N))
         return
     
     for op in [' ', '+', '-']:
-        dfs(cur + 1, N, operations + [op], expressions + str(cur) + op)
+        operations.append(op)
+        expressions.append(str(cur))
+        expressions.append(op)
+        
+        dfs(cur + 1, N, operations, expressions)
+        
+        operations.pop()
+        expressions.pop()
+        expressions.pop()
 
 for i in range(T):
     N = int(input())
     results = []
     
-    dfs(1, N, [], "")
+    dfs(1, N, [], [])
     
     results.sort()
     for res in results:
