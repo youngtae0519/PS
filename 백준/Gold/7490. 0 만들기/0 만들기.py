@@ -1,38 +1,53 @@
 import sys
 input = sys.stdin.readline
 
-def dfs(N, arr):
-    if N > 1:
-        for i in range(3):
-            arr.append(cal[i])
-            dfs(N - 1, arr)
-            arr.pop()
-    elif N == 1:
-        ans = []
-        tmp = []
-
-        for i in range(1, len(arr) + 1):
-            ans.append(str(i))
-            ans.append(arr[i - 1])
-            tmp.append(str(i))
-            if arr[i - 1] != ' ':
-                tmp.append(arr[i - 1])
-
-        ans.append(str(len(arr) + 1))
-        tmp.append(str(len(arr) + 1)) 
-
-        if eval(''.join(tmp)) == 0:
-            print(''.join(ans))
-        
-
-
 T = int(input())
-cal = [' ', '+', '-']
 
-for _ in range(T):
+def cal(operations, N):
+    tmp = ""
+    num = []
+    op = []
+    
+    for i in range(1, N + 1):
+        tmp += str(i)
+        
+        if i < N:
+            if operations[i - 1] == ' ':
+                continue
+            else:
+                op.append(operations[i - 1])
+                num.append(int(tmp))
+                tmp = ""
+            
+    num.append(int(tmp))
+    total = num[0]
+    
+    for i in range(len(op)):
+        if op[i] == '+':
+            total += num[i + 1]
+        else:
+            total -= num[i + 1]
+            
+    return total
+
+def dfs(cur, N, operations, expressions):
+    if cur == N:
+        if cal(operations, N) == 0:
+            results.append(expressions + str(N))
+        return
+    
+    for op in [' ', '+', '-']:
+        dfs(cur + 1, N, operations + [op], expressions + str(cur) + op)
+
+for i in range(T):
     N = int(input())
-
-    dfs(N, [])
-
-    if _ != T - 1:
+    results = []
+    
+    dfs(1, N, [], "")
+    
+    results.sort()
+    for res in results:
+        print(res)
+    
+    if i != T - 1:
         print()
