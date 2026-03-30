@@ -167,7 +167,17 @@ jobs:
               labels: [tier.name, ...algoTags]
             });
 
+            // ✅ 이 부분 추가 - number 확인
+            const issueNumber = issue.data.number;
+            console.log(`Created issue number: ${issueNumber}`);
+            
+            if (!issueNumber) {
+              throw new Error(`Issue number is invalid: ${JSON.stringify(issue.data)}`);
+            }
+            
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.data.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,  // ✅ 변수로 분리
               body: "### ✍️ 오늘의 복기 기록\n\n**1. 핵심 로직**\n- \n\n**2. 시행착오**\n- \n\n**3. 새롭게 알게 된 팁**\n- "
             });
