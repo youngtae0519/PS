@@ -1,22 +1,31 @@
 import sys
-from collections import defaultdict
 input = sys.stdin.readline
 
 N = int(input())
 nums = list(map(int, input().split()))
-dic = defaultdict(list)
 
-for i in range(N - 1):
-    for j in range(i + 1, N):
-        dic[nums[i] + nums[j]].append([i, j])
-
+nums.sort()
 ans = 0
 
 for i in range(N):
     num = nums[i]
-    for item in dic[num]:
-        if i not in item:
-            ans += 1
-            break
+    left = 0
+    right = N - 1
+    
+    while left < right:
+        cur = nums[left] + nums[right]
         
+        if cur == num:
+            if left != i and right != i:
+                ans += 1
+                break
+            elif left == i:
+                left += 1
+            else:
+                right -= 1
+        elif cur > num:
+            right -= 1
+        else:
+            left += 1
+
 print(ans)
