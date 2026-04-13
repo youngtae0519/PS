@@ -43,10 +43,14 @@ jobs:
 
           # Solved.ac API 호출 (난이도 및 태그 정보)
           RESPONSE=$(curl -s "https://solved.ac/api/v3/problem/show?problemId=$PROBLEM_NO")
-          echo "DEBUG PROBLEM_NO: $PROBLEM_NO"
-          echo "DEBUG RESPONSE: $RESPONSE"
-          PROB_LEVEL=$(echo $RESPONSE | jq -r '.level')
-          ALGO_TAGS=$(echo $RESPONSE | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')
+          if echo "$RESPONSE" | jq empty 2>/dev/null; then
+            PROB_LEVEL=$(echo "$RESPONSE" | jq -r '.level')
+            ALGO_TAGS=$(echo "$RESPONSE" | jq -r '.tags[].displayNames[] | select(.language=="ko") | .name' | tr '\n' ',' | sed 's/,$//')
+          else
+            echo "WARNING: solved.ac API 실패, 기본값 사용"
+            PROB_LEVEL="0"
+            ALGO_TAGS=""
+          fi
           
           echo "prob_level=$PROB_LEVEL" >> $GITHUB_OUTPUT
           echo "algo_tags=$ALGO_TAGS" >> $GITHUB_OUTPUT
