@@ -130,7 +130,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           npm install -g @google/gemini-cli
-          gemini --model "gemini-2.5-flash" \
+          gemini --model "gemini-2.0-flash" \
                  --prompt "$(cat full_prompt.txt)" > review_result.txt
 
       - name: Create Issue
