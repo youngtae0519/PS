@@ -36,11 +36,11 @@ for i in range(N):
         if arr[j]:
             union(i + 1, j + 1)
             
-plan = list(map(int, input().rstrip().split()))
+plan = list(set(map(int, input().rstrip().split())))
 root = find(plan[0])
 ans = "YES"
 
-for i in range(1, M):
+for i in range(1, len(plan)):
     if root != find(plan[i]):
         ans = "NO"
         break
