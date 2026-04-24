@@ -115,7 +115,7 @@ jobs:
           PROMPT=$(cat full_prompt.txt)
           PAYLOAD=$(jq -n --arg text "$PROMPT" '{contents: [{parts: [{text: $text}]}]}')
 
-          API_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}"
+          API_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}"
 
           MAX_RETRY=3
           WAIT=30  # 초기 대기시간(초)
