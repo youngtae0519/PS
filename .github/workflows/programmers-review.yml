@@ -88,6 +88,7 @@ jobs:
           FIRST_FILE="${{ steps.prepare.outputs.first_file }}"
           PROB_NAME="${{ steps.prepare.outputs.prob_name }}"
           LV="${{ steps.prepare.outputs.level }}"
+          TAGS="${{ steps.parse.outputs.tags }}"
 
           cat <<EOF > full_prompt.txt
           너는 알고리즘 효율성과 파이썬 성능 최적화의 대가야.
@@ -117,15 +118,19 @@ jobs:
           $(cat "$FIRST_FILE")
           EOF
 
-      - name: AI Review (Gemini 2.5 Flash + Retry)
+      - name: AI Review (Groq + Retry)
         if: steps.prepare.outputs.has_files == 'true'
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           PROMPT=$(cat full_prompt.txt)
-          PAYLOAD=$(jq -n --arg text "$PROMPT" '{contents: [{parts: [{text: $text}]}]}')
+          PAYLOAD=$(jq -n --arg text "$PROMPT" '{
+            model: "llama-3.3-70b-versatile",
+            messages: [{role: "user", content: $text}],
+            temperature: 0.3
+          }')
 
-          API_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}"
+          API_URL="https://api.groq.com/openai/v1/chat/completions"
 
           MAX_RETRY=3
           WAIT=30  # 초기 대기시간(초)
@@ -137,12 +142,14 @@ jobs:
             HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
               -X POST "$API_URL" \
               -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${GROQ_API_KEY}" \
               -d "$PAYLOAD")
 
             echo "HTTP Status: $HTTP_STATUS"
 
             if [ "$HTTP_STATUS" = "200" ]; then
-              REVIEW=$(jq -r '.candidates[0].content.parts[0].text' response.json)
+              # OpenAI 호환 응답 형식
+              REVIEW=$(jq -r '.choices[0].message.content' response.json)
               if [ -n "$REVIEW" ] && [ "$REVIEW" != "null" ]; then
                 echo "$REVIEW" > review_result.txt
                 echo "✅ AI 리뷰 성공"
@@ -175,7 +182,6 @@ jobs:
             const review = fs.readFileSync('review_result.txt', 'utf8');
 
             const lv = "${{ steps.prepare.outputs.level }}";
-            const tags = "${{ steps.parse.outputs.tags }}".split(',').map(t => t.trim()).filter(t => t);
             const probName = "${{ steps.prepare.outputs.prob_name }}";
             const reviewDate = "${{ steps.prepare.outputs.review_date }}";
 
@@ -199,7 +205,6 @@ jobs:
             };
 
             await ensureLabel(lvLabel, lvColor);
-            for (const tag of tags) await ensureLabel(tag, 'ededed');
 
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
@@ -214,7 +219,7 @@ jobs:
                 ``,
                 review
               ].join('\n\n'),
-              labels: [lvLabel, ...tags]
+              labels: [lvLabel]
             });
 
             const issueNumber = issue.data.number;
