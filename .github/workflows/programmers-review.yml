@@ -140,7 +140,7 @@ jobs:
         run: |
           PROMPT=$(cat full_prompt.txt)
           PAYLOAD=$(jq -n --arg text "$PROMPT" '{
-            model: "deepseek-r1-distill-llama-70b",
+            model: "openai/gpt-oss-120b",
             messages: [{role: "user", content: $text}],
             temperature: 0.1
           }')
