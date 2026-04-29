@@ -141,7 +141,7 @@ jobs:
           $(cat "$FIRST_FILE")
           EOF
 
-      - name: AI Review (Groq + Retry)
+      - name: AI Review (OpenRouter + Retry)
         if: steps.prepare.outputs.has_files == 'true'
         env:
           GROQ_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
