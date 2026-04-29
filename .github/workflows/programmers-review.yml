@@ -144,11 +144,11 @@ jobs:
       - name: AI Review (OpenRouter + Retry)
         if: steps.prepare.outputs.has_files == 'true'
         env:
-          GROQ_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           PROMPT=$(cat full_prompt.txt)
           PAYLOAD=$(jq -n --arg text "$PROMPT" '{
-            model: "openai/gpt-oss-120b",
+            model: "openai/gpt-oss-120b:free",
             messages: [{role: "user", content: $text}],
             temperature: 0.6,
             top_p: 0.95,
