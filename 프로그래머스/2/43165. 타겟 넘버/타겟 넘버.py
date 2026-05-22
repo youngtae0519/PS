@@ -12,4 +12,5 @@ def dfs(idx, numbers, num, target):
 def solution(numbers, target):
     dfs(1, numbers, numbers[0], target)
     dfs(1, numbers, -numbers[0], target)
+    
     return answer
